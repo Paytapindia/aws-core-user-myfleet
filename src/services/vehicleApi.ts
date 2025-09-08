@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+
 
 // Vehicle API service for fetching real RC verification data
 export interface VehicleApiResponse {

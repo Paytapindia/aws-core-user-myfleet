@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Vehicle, AddVehicleFormData } from '@/types/vehicle';
 import { useAuth } from './AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { apiService } from '@/services/api';
 import { getInsuranceStatus } from '@/lib/utils';
 
 interface VehicleContextType {

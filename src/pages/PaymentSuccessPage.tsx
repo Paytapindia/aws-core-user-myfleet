@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { apiService } from "@/services/api";
 
 const PaymentSuccessPage = () => {
   const [params] = useSearchParams();
@@ -20,12 +20,13 @@ const PaymentSuccessPage = () => {
         return;
       }
       try {
-        const { data, error } = await supabase.functions.invoke("cashfree-verify-order", {
-          body: { orderId },
+        // Call payment verification endpoint
+        const response = await apiService.post<{ isPaid: boolean; plan: string }>('/payments/verify', {
+          orderId,
         });
-        if (error) throw error;
-        if (data?.isPaid) {
-          const plan = data?.plan === "semiannual" ? "semiannual" : "annual";
+        
+        if (response.data.isPaid) {
+          const plan = response.data.plan === "semiannual" ? "semiannual" : "annual";
           await setPaidSubscription(plan);
           setStatus("success");
           setMessage("Payment confirmed! Redirecting to your dashboard...");

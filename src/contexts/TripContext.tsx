@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Trip, CreateTripFormData, TripFilters, TripAnalytics, TripStatus } from '@/types/trip';
 import { useAuth } from './AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { apiService } from '@/services/api';
 import { toast } from 'sonner';
 
 interface TripContextType {

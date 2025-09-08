@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Shield, Truck, Mail, Lock, UserPlus, LogIn, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+
 
 const LoginPage = () => {
   const [mode, setMode] = useState<'login' | 'signup'>('login');

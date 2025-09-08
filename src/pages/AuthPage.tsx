@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Truck, Car, AlertTriangle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 
 const AuthPage = () => {
   const navigate = useNavigate();

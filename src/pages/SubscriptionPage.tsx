@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+
 import { useAuth } from "@/contexts/AuthContext";
 
 const plans = [

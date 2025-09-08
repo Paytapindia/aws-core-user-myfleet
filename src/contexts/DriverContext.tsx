@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Driver, AddDriverFormData } from '@/types/driver';
 import { useAuth } from './AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { apiService } from '@/services/api';
 
 interface DriverContextType {
   drivers: Driver[];

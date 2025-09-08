@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Transaction } from '@/types/transaction';
-import { supabase } from '@/integrations/supabase/client';
+import { apiService } from '@/services/api';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 

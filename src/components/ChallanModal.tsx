@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { AlertTriangle, CreditCard, MapPin, Calendar, IndianRupee, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from "@/integrations/supabase/client";
+
 
 interface Challan {
   id: string;

@@ -1,6 +1,6 @@
-import { supabase } from "@/integrations/supabase/client";
+
 import type { FastagVerificationResponse, FastagData } from "@/api/fastagApi";
-import type { Database, Json } from "@/integrations/supabase/types";
+
 
 export interface SaveFastagManualInput {
   status?: string;
