@@ -1,24 +1,23 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { User as SupabaseUser, Session } from '@supabase/supabase-js';
+import { authService, User as AuthUser } from '@/services/auth';
 
 interface User {
   id: string;
-  phone: string;
-  email?: string;
+  phone?: string;
+  email: string;
   fullName?: string;
   companyName?: string;
   panNumber?: string;
   isOnboarded: boolean;
-  subscribed?: boolean;
+  subscribed: boolean;
   subscriptionTier?: string | null;
   subscriptionEnd?: string | null;
   phoneVerified?: boolean;
+  emailUnverified?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
   isLoading: boolean;
   emailUnverified: boolean;
   login: (email: string, password: string) => Promise<{ error?: string }>;
@@ -56,158 +55,104 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [emailUnverified, setEmailUnverified] = useState(false);
 
   useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.email);
-        setSession(session);
-        
-        // Check email verification status
-        setEmailUnverified(session?.user && !session.user.email_confirmed_at ? true : false);
-        
-        if (session?.user && event !== 'SIGNED_OUT') {
-          // Only load profile if we have a valid session
-          setTimeout(async () => {
-            await loadUserProfile(session.user);
-          }, 0);
-        } else {
-          // Clear user state on sign out or no session
-          setUser(null);
-          setEmailUnverified(false);
-          setIsLoading(false);
-        }
-      }
-    );
-
-    // Check for existing session on mount
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      console.log('Initial session check:', session?.user?.email, error);
-      
-      if (error) {
-        console.error('Session error:', error);
-        setSession(null);
-        setUser(null);
-        setIsLoading(false);
-        return;
-      }
-
-      setSession(session);
-      setEmailUnverified(session?.user && !session.user.email_confirmed_at ? true : false);
-      if (session?.user) {
-        await loadUserProfile(session.user);
-      } else {
-        setUser(null);
-        setEmailUnverified(false);
+    // Initialize auth state from localStorage
+    const initializeAuth = () => {
+      const currentUser = authService.getCurrentUser();
+      if (currentUser) {
+        const userData: User = {
+          id: currentUser.id,
+          email: currentUser.email,
+          fullName: currentUser.fullName,
+          phone: currentUser.phone,
+          isOnboarded: currentUser.isOnboarded,
+          subscribed: currentUser.subscribed,
+          subscriptionEnd: currentUser.subscriptionEnd,
+          emailUnverified: currentUser.emailUnverified,
+        };
+        setUser(userData);
+        setEmailUnverified(currentUser.emailUnverified || false);
       }
       setIsLoading(false);
-    });
+    };
 
-    return () => subscription.unsubscribe();
+    initializeAuth();
   }, []);
 
-  const loadUserProfile = async (supabaseUser: SupabaseUser) => {
+  const login = async (email: string, password: string): Promise<{ error?: string }> => {
     try {
-      console.log('Loading profile for user:', supabaseUser.email);
+      setIsLoading(true);
+      const response = await authService.login({ email, password });
       
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', supabaseUser.id)
-        .maybeSingle();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error loading profile:', error);
-        // On profile error, clear user state to force re-authentication
-        setUser(null);
-        setSession(null);
-        return;
-      }
-
-      // If no profile exists, this means the user trigger didn't work or user is invalid
-      if (!profile) {
-        console.warn('No profile found for user, clearing session');
-        await supabase.auth.signOut();
-        setUser(null);
-        setSession(null);
-        return;
-      }
-
       const userData: User = {
-        id: supabaseUser.id,
-        email: supabaseUser.email || '',
-        phone: supabaseUser.phone || '',
-        fullName: profile.full_name || '',
-        companyName: profile.company_name || '',
-        panNumber: profile.pan_number || '',
-        isOnboarded: profile.is_onboarded || false,
-        subscribed: profile.subscribed || false,
-        subscriptionTier: profile.subscription_tier || null,
-        subscriptionEnd: profile.subscription_end || null,
-        phoneVerified: profile.phone_verified || false,
+        id: response.user.id,
+        email: response.user.email,
+        fullName: response.user.fullName,
+        phone: response.user.phone,
+        isOnboarded: response.user.isOnboarded,
+        subscribed: response.user.subscribed,
+        subscriptionEnd: response.user.subscriptionEnd,
+        emailUnverified: response.user.emailUnverified,
       };
-
-      console.log('User profile loaded:', userData.email, userData.isOnboarded);
-      setUser(userData);
-    } catch (error) {
-      console.error('Failed to load user profile:', error);
-      // On any error, clear user state
-      setUser(null);
-      setSession(null);
-      await supabase.auth.signOut();
-    }
-  };
-
-  const signup = async (email: string, password: string, userData: { fullName: string; phone: string; vehicleNumber: string }) => {
-    try {
-      const redirectUrl = `${window.location.origin}/`;
       
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            full_name: userData.fullName,
-            phone: userData.phone,
-            vehicle_number: userData.vehicleNumber,
-          }
-        }
-      });
-
-      if (error) {
-        return { error: error.message };
-      }
-
+      setUser(userData);
+      setEmailUnverified(response.user.emailUnverified || false);
       return {};
     } catch (error) {
-      return { error: 'An unexpected error occurred' };
+      return { error: error instanceof Error ? error.message : 'Login failed' };
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const signup = async (
+    email: string, 
+    password: string, 
+    userData: { fullName: string; phone: string; vehicleNumber: string }
+  ): Promise<{ error?: string }> => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      setIsLoading(true);
+      const response = await authService.signUp({
         email,
         password,
+        fullName: userData.fullName,
+        phone: userData.phone,
       });
-
-      if (error) {
-        // Check for email not confirmed error
-        if (error.message.toLowerCase().includes('email not confirmed') || 
-            error.message.toLowerCase().includes('confirm your email')) {
-          return { error: 'Email not confirmed. Please check your inbox or resend verification email.' };
-        }
-        return { error: error.message };
-      }
-
+      
+      const userProfile: User = {
+        id: response.user.id,
+        email: response.user.email,
+        fullName: response.user.fullName,
+        phone: response.user.phone,
+        isOnboarded: response.user.isOnboarded,
+        subscribed: response.user.subscribed,
+        subscriptionEnd: response.user.subscriptionEnd,
+        emailUnverified: response.user.emailUnverified,
+      };
+      
+      setUser(userProfile);
+      setEmailUnverified(response.user.emailUnverified || false);
       return {};
     } catch (error) {
-      return { error: 'An unexpected error occurred' };
+      return { error: error instanceof Error ? error.message : 'Signup failed' };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async (): Promise<void> => {
+    try {
+      setIsLoading(true);
+      await authService.logout();
+      setUser(null);
+      setEmailUnverified(false);
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -217,46 +162,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     vehicleNumber: string;
   }): Promise<boolean> => {
     try {
-      if (!user) {
-        console.error('No user found during onboarding');
-        return false;
-      }
+      if (!user) return false;
       
-      // Update profile in Supabase
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: profileData.fullName,
-          is_onboarded: true,
-        })
-        .eq('user_id', user.id);
-
-      if (profileError) {
-        console.error('Failed to update profile:', profileError);
-        return false;
-      }
-
-      // Create initial vehicle
-      const { error: vehicleError } = await supabase
-        .from('vehicles')
-        .insert({
-          user_id: user.id,
-          number: profileData.vehicleNumber,
-          model: "Not specified",
-          status: 'active',
-        });
-
-      if (vehicleError) {
-        console.error('Failed to create initial vehicle:', vehicleError);
-        return false;
-      }
+      // Update user profile with onboarding data
+      const updatedUser = {
+        ...user,
+        fullName: profileData.fullName,
+        phone: profileData.mobileNo,
+        isOnboarded: true,
+      };
       
-      // Reload user profile
-      await loadUserProfile({ id: user.id } as SupabaseUser);
+      // Store updated user data
+      localStorage.setItem('auth_user', JSON.stringify({
+        ...authService.getCurrentUser(),
+        fullName: profileData.fullName,
+        phone: profileData.mobileNo,
+        isOnboarded: true,
+      }));
       
+      setUser(updatedUser);
       return true;
     } catch (error) {
-      console.error('Onboarding failed:', error);
+      console.error('Onboarding error:', error);
       return false;
     }
   };
@@ -268,148 +195,111 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     phone: string;
   }): Promise<boolean> => {
     try {
-      if (!user) {
-        console.error('No user found during profile update');
-        return false;
-      }
+      if (!user) return false;
       
-      // Check if phone number changed, reset verification status if so
-      const phoneChanged = user.phone !== profileData.phone;
+      const updatedUser = {
+        ...user,
+        fullName: profileData.fullName,
+        companyName: profileData.companyName,
+        panNumber: profileData.panNumber,
+        phone: profileData.phone,
+      };
       
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: profileData.fullName,
-          company_name: profileData.companyName,
-          pan_number: profileData.panNumber,
-          phone: profileData.phone,
-          ...(phoneChanged && { phone_verified: false }),
-        })
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('Failed to update profile:', error);
-        return false;
-      }
-
-      // Reload user profile
-      await loadUserProfile({ id: user.id } as SupabaseUser);
+      // Store updated user data
+      localStorage.setItem('auth_user', JSON.stringify({
+        ...authService.getCurrentUser(),
+        ...profileData,
+      }));
       
+      setUser(updatedUser);
       return true;
     } catch (error) {
-      console.error('Profile update failed:', error);
+      console.error('Profile update error:', error);
       return false;
     }
   };
 
-  const logout = async () => {
-    try {
-      console.log('Logging out user');
-      // Clear state first
-      setUser(null);
-      setSession(null);
-      
-      // Sign out from Supabase
-      await supabase.auth.signOut();
-      
-      // Clear any remaining auth data
-      localStorage.removeItem('supabase.auth.token');
-      Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
-          localStorage.removeItem(key);
-        }
-      });
-      
-      // Force page reload to ensure clean state
-      window.location.href = '/';
-    } catch (error) {
-      console.error('Error during logout:', error);
-      // Force reload even if logout fails
-      window.location.href = '/';
-    }
-  };
-
   const startTrial = async (): Promise<void> => {
-    if (!user) throw new Error('No user');
-    const end = new Date();
-    end.setDate(end.getDate() + 30);
-    
-    const { error } = await supabase
-      .from('profiles')
-      .update({
+    try {
+      if (!user) return;
+      
+      const trialEnd = new Date();
+      trialEnd.setDate(trialEnd.getDate() + 7); // 7-day trial
+      
+      const updatedUser = {
+        ...user,
         subscribed: true,
-        subscription_tier: 'trial',
-        subscription_end: end.toISOString(),
-      })
-      .eq('user_id', user.id);
-
-    if (error) {
-      console.error('Failed to start trial:', error);
-      throw error;
+        subscriptionTier: 'trial',
+        subscriptionEnd: trialEnd.toISOString(),
+      };
+      
+      localStorage.setItem('auth_user', JSON.stringify({
+        ...authService.getCurrentUser(),
+        subscribed: true,
+        subscriptionTier: 'trial',
+        subscriptionEnd: trialEnd.toISOString(),
+      }));
+      
+      setUser(updatedUser);
+    } catch (error) {
+      console.error('Start trial error:', error);
     }
-
-    await loadUserProfile({ id: user.id } as SupabaseUser);
   };
 
   const setPaidSubscription = async (tier: 'semiannual' | 'annual'): Promise<void> => {
-    if (!user) throw new Error('No user');
-    const end = new Date();
-    end.setMonth(end.getMonth() + (tier === 'semiannual' ? 6 : 12));
-    
-    const { error } = await supabase
-      .from('profiles')
-      .update({
+    try {
+      if (!user) return;
+      
+      const subscriptionEnd = new Date();
+      if (tier === 'semiannual') {
+        subscriptionEnd.setMonth(subscriptionEnd.getMonth() + 6);
+      } else {
+        subscriptionEnd.setFullYear(subscriptionEnd.getFullYear() + 1);
+      }
+      
+      const updatedUser = {
+        ...user,
         subscribed: true,
-        subscription_tier: tier,
-        subscription_end: end.toISOString(),
-      })
-      .eq('user_id', user.id);
-
-    if (error) {
-      console.error('Failed to set paid subscription:', error);
-      throw error;
+        subscriptionTier: tier,
+        subscriptionEnd: subscriptionEnd.toISOString(),
+      };
+      
+      localStorage.setItem('auth_user', JSON.stringify({
+        ...authService.getCurrentUser(),
+        subscribed: true,
+        subscriptionTier: tier,
+        subscriptionEnd: subscriptionEnd.toISOString(),
+      }));
+      
+      setUser(updatedUser);
+    } catch (error) {
+      console.error('Set subscription error:', error);
     }
-
-    await loadUserProfile({ id: user.id } as SupabaseUser);
   };
 
-  const resendVerificationEmail = async (email: string) => {
+  const resendVerificationEmail = async (email: string): Promise<{ error?: string }> => {
     try {
-      const redirectUrl = `${window.location.origin}/`;
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email,
-        options: {
-          emailRedirectTo: redirectUrl
-        }
-      });
-
-      if (error) {
-        return { error: error.message };
-      }
-
+      // Placeholder implementation
+      console.log('Resending verification email to:', email);
       return {};
     } catch (error) {
-      return { error: 'Failed to resend verification email' };
+      return { error: error instanceof Error ? error.message : 'Failed to resend email' };
     }
   };
 
-  return (
-    <AuthContext.Provider value={{
-      user,
-      session,
-      isLoading,
-      emailUnverified,
-      login,
-      signup,
-      logout,
-      completeOnboarding,
-      updateProfile,
-      startTrial,
-      setPaidSubscription,
-      resendVerificationEmail
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value: AuthContextType = {
+    user,
+    isLoading,
+    emailUnverified,
+    login,
+    signup,
+    logout,
+    completeOnboarding,
+    updateProfile,
+    startTrial,
+    setPaidSubscription,
+    resendVerificationEmail,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
